@@ -10,6 +10,7 @@ from lxml import etree
 from thefuzz import fuzz
 from pathlib import Path
 import sys
+import os.path
 
 # The threshold for fuzzy string comparison (the fuzz ratio must be GREATER THAN this threshold for a match)
 # Make this higher if unrelated titles get interpreterd as Procedure, Prerequisites etc
@@ -418,5 +419,9 @@ def process_topic(in_file_name,out_file_name):
 
     out_tree.write(out_file_name,xml_declaration = True)
 
+if len(sys.argv) != 2:
+    print(f"Convert DITA topic to specialization defined by outputclass - currently procedure only")
+    print(f"Usage: {sys.argv[0]} file.dita")
+    sys.exit(1)
 Path("out").mkdir(exist_ok=True)
-process_topic("pac-test-proc.dita","out/pac-test-proc.dita")
+process_topic(sys.argv[1],os.path.join("out",sys.argv[1]))
