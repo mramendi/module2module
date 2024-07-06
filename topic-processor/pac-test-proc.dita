@@ -1,0 +1,278 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<!DOCTYPE topic PUBLIC "-//OASIS//DTD DITA Topic//EN" "topic.dtd">
+<topic id="using-pipelines-as-code-with-github-webhook_using-pipelines-as-code-repos" outputclass="procedure">
+<title>Using Pipelines as Code with GitHub Webhook</title>
+<body>
+<p>Use Pipelines as Code with GitHub Webhook on your repository if you cannot create a GitHub App. However, using Pipelines as Code with GitHub Webhook does not give you access to the GitHub Check Runs API. The status of the tasks is added as comments on the pull request and is unavailable under the <b>Checks</b> tab.</p>
+<note type="note">
+<p>Pipelines as Code with GitHub Webhook does not support GitOps comments such as <tt>/retest</tt> and <tt>/ok-to-test</tt>. To restart the continuous integration (CI), create a new commit to the repository. For example, to create a new commit without any changes, you can use the following command:</p>
+<codeblock outputclass="language-terminal">
+$ git --amend -a --no-edit &amp;&amp; git push --force-with-lease &lt;origin&gt; &lt;branchname&gt;
+</codeblock>
+</note>
+<div outputclass="ulist">
+<p outputclass="title"><b>Prerequisites</b></p>
+<ul>
+<li>Ensure that Pipelines as Code is installed on the cluster.</li>
+<li>
+<p>For authorization, create a personal access token on GitHub.</p>
+<ul>
+<li>
+<p>To generate a secure and fine-grained token, restrict its scope to a specific repository and grant the following permissions:</p>
+<table>
+<title>Permissions for fine-grained tokens</title>
+<tgroup cols="2">
+<colspec colname="col_1" colwidth="50*"/>
+<colspec colname="col_2" colwidth="50*"/>
+<thead>
+<row>
+<entry>Name</entry>
+<entry>Access</entry>
+</row>
+</thead>
+<tbody>
+<row>
+<entry>
+<p>Administration</p>
+</entry>
+<entry>
+<p>Read-only</p>
+</entry>
+</row>
+<row>
+<entry>
+<p>Metadata</p>
+</entry>
+<entry>
+<p>Read-only</p>
+</entry>
+</row>
+<row>
+<entry>
+<p>Content</p>
+</entry>
+<entry>
+<p>Read-only</p>
+</entry>
+</row>
+<row>
+<entry>
+<p>Commit statuses</p>
+</entry>
+<entry>
+<p>Read and Write</p>
+</entry>
+</row>
+<row>
+<entry>
+<p>Pull request</p>
+</entry>
+<entry>
+<p>Read and Write</p>
+</entry>
+</row>
+<row>
+<entry>
+<p>Webhooks</p>
+</entry>
+<entry>
+<p>Read and Write</p>
+</entry>
+</row>
+</tbody>
+</tgroup>
+</table>
+</li>
+<li>
+<p>To use classic tokens, set the scope as <tt>public_repo</tt> for public repositories and <tt>repo</tt> for private repositories. In addition, provide a short token expiration period and note the token in an alternate location.</p>
+<note type="note">
+<p>If you want to configure the webhook using the <tt>tkn pac</tt> CLI, add the <tt>admin:repo_hook</tt> scope.</p>
+</note>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<div outputclass="olist">
+<p outputclass="title"><b>Procedure</b></p>
+<ol>
+<li>
+<p>Configure the webhook and create a <tt>Repository</tt> custom resource (CR).</p>
+<ul>
+<li>
+<p>To configure a webhook and create a <tt>Repository</tt> CR <i>automatically</i> using the <tt>tkn pac</tt> CLI tool, use the following command:</p>
+<codeblock outputclass="language-terminal">
+$ tkn pac create repo
+</codeblock>
+<div outputclass="listing">
+<p outputclass="title"><b>Sample interactive output</b></p>
+<codeblock outputclass="language-terminal">
+? Enter the Git repository url (default: https://github.com/owner/repo):
+? Please enter the namespace where the pipeline should run (default: repo-pipelines):
+! Namespace repo-pipelines is not found
+? Would you like me to create the namespace repo-pipelines? Yes
+✓ Repository owner-repo has been created in repo-pipelines namespace
+✓ Setting up GitHub Webhook for Repository https://github.com/owner/repo
+👀 I have detected a controller url: https://pipelines-as-code-controller-openshift-pipelines.apps.example.com
+? Do you want me to use it? Yes
+? Please enter the secret to configure the webhook for payload validation (default: sJNwdmTifHTs):  sJNwdmTifHTs
+ℹ ️You now need to create a GitHub personal access token, please checkout the docs at https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token for the required scopes
+? Please enter the GitHub access token:  ****************************************
+✓ Webhook has been created on repository owner/repo
+🔑 Webhook Secret owner-repo has been created in the repo-pipelines namespace.
+🔑 Repository CR owner-repo has been updated with webhook secret in the repo-pipelines namespace
+ℹ Directory .tekton has been created.
+✓ We have detected your repository using the programming language Go.
+✓ A basic template has been created in /home/Go/src/github.com/owner/repo/.tekton/pipelinerun.yaml, feel free to customize it.
+</codeblock>
+</div>
+</li>
+<li>
+<p>To configure a webhook and create a <tt>Repository</tt> CR <i>manually</i>, perform the following steps:</p>
+<ol>
+<li>
+<p>On your OpenShift cluster, extract the public URL of the Pipelines as Code controller.</p>
+<codeblock outputclass="language-terminal">
+$ echo https://$(oc get route -n openshift-pipelines pipelines-as-code-controller -o jsonpath='{.spec.host}')
+</codeblock>
+</li>
+<li>
+<p>On your GitHub repository or organization, perform the following steps:</p>
+<ol>
+<li>Go to <b>Settings</b> –&gt; <b>Webhooks</b> and click <b>Add webhook</b>.</li>
+<li>Set the <b>Payload URL</b> to the Pipelines as Code controller public URL.</li>
+<li>Select the content type as <b>application/json</b>.</li>
+<li>
+<p>Add a webhook secret and note it in an alternate location. With <tt>openssl</tt> installed on your local machine, generate a random secret.</p>
+<codeblock outputclass="language-terminal">
+$ openssl rand -hex 20
+</codeblock>
+</li>
+<li>Click <b>Let me select individual events</b> and select these events: <b>Commit comments</b>, <b>Issue comments</b>, <b>Pull request</b>, and <b>Pushes</b>.</li>
+<li>Click <b>Add webhook</b>.</li>
+</ol>
+</li>
+<li>
+<p>On your OpenShift cluster, create a <tt>Secret</tt> object with the personal access token and webhook secret.</p>
+<codeblock outputclass="language-terminal">
+$ oc -n target-namespace create secret generic github-webhook-config \
+  --from-literal provider.token="&lt;GITHUB_PERSONAL_ACCESS_TOKEN&gt;" \
+  --from-literal webhook.secret="&lt;WEBHOOK_SECRET&gt;"
+</codeblock>
+</li>
+<li>
+<p>Create a <tt>Repository</tt> CR.</p>
+<div outputclass="listing">
+<p outputclass="title"><b>Example: <tt>Repository</tt> CR</b></p>
+<codeblock outputclass="language-yaml">
+apiVersion: "pipelinesascode.tekton.dev/v1alpha1"
+kind: Repository
+metadata:
+  name: my-repo
+  namespace: target-namespace
+spec:
+  url: "https://github.com/owner/repo"
+  git_provider:
+    secret:
+      name: "github-webhook-config"
+      key: "provider.token" # Set this if you have a different key in your secret
+    webhook_secret:
+      name: "github-webhook-config"
+      key: "webhook.secret" # Set this if you have a different key for your secret
+</codeblock>
+</div>
+<note type="note">
+<p>Pipelines as Code assumes that the OpenShift <tt>Secret</tt> object and the <tt>Repository</tt> CR are in the same namespace.</p>
+</note>
+</li>
+</ol>
+</li>
+</ul>
+</li>
+<li>
+<p>Optional: For an existing <tt>Repository</tt> CR, add multiple GitHub Webhook secrets or provide a substitute for a deleted secret.</p>
+<ol>
+<li>
+<p>Add a webhook using the <tt>tkn pac</tt> CLI tool.</p>
+<div outputclass="listing">
+<p outputclass="title"><b>Example: Additional webhook using the <tt>tkn pac</tt> CLI</b></p>
+<codeblock outputclass="language-terminal">
+$ tkn pac webhook add -n repo-pipelines
+</codeblock>
+</div>
+<div outputclass="listing">
+<p outputclass="title"><b>Sample interactive output</b></p>
+<codeblock outputclass="language-terminal">
+✓ Setting up GitHub Webhook for Repository https://github.com/owner/repo
+👀 I have detected a controller url: https://pipelines-as-code-controller-openshift-pipelines.apps.example.com
+? Do you want me to use it? Yes
+? Please enter the secret to configure the webhook for payload validation (default: AeHdHTJVfAeH):  AeHdHTJVfAeH
+✓ Webhook has been created on repository owner/repo
+🔑 Secret owner-repo has been updated with webhook secert in the repo-pipelines namespace.
+</codeblock>
+</div>
+</li>
+<li>Update the <tt>webhook.secret</tt> key in the existing OpenShift <tt>Secret</tt> object.</li>
+</ol>
+</li>
+<li>
+<p>Optional: For an existing <tt>Repository</tt> CR, update the personal access token.</p>
+<ul>
+<li>
+<p>Update the personal access token using the <tt>tkn pac</tt> CLI tool.</p>
+<div outputclass="listing">
+<p outputclass="title"><b>Example: Updating personal access token using the <tt>tkn pac</tt> CLI</b></p>
+<codeblock outputclass="language-terminal">
+$ tkn pac webhook update-token -n repo-pipelines
+</codeblock>
+</div>
+<div outputclass="listing">
+<p outputclass="title"><b>Sample interactive output</b></p>
+<codeblock outputclass="language-terminal">
+? Please enter your personal access token:  ****************************************
+🔑 Secret owner-repo has been updated with new personal access token in the repo-pipelines namespace.
+</codeblock>
+</div>
+</li>
+<li>
+<p>Alternatively, update the personal access token by modifying the <tt>Repository</tt> CR.</p>
+<ol>
+<li>
+<p>Find the name of the secret in the <tt>Repository</tt> CR.</p>
+<codeblock outputclass="language-yaml">
+apiVersion: "pipelinesascode.tekton.dev/v1alpha1"
+kind: Repository
+metadata:
+  name: my-repo
+  namespace: target-namespace
+spec:
+# ...
+  git_provider:
+    secret:
+      name: "github-webhook-config"
+# ...
+</codeblock>
+</li>
+<li>
+<p>Use the <tt>oc patch</tt> command to update the values of the <tt>$NEW_TOKEN</tt> in the <tt>$target_namespace</tt> namespace.</p>
+<codeblock outputclass="language-terminal">
+$ oc -n $target_namespace patch secret github-webhook-config -p "{\"data\": {\"provider.token\": \"$(echo -n $NEW_TOKEN|base64 -w0)\"}}"
+</codeblock>
+</li>
+</ol>
+</li>
+</ul>
+</li>
+</ol>
+</div>
+<div outputclass="ulist">
+<p outputclass="title"><b>Additional resources</b></p>
+<ul>
+<li><xref href="https://docs.github.com/en/developers/webhooks-and-events/webhooks/creating-webhooks" scope="external">GitHub Webhook documentation on GitHub</xref></li>
+<li><xref href="https://docs.github.com/en/rest/guides/getting-started-with-the-checks-api" scope="external">GitHub Check Runs documentation on GitHub</xref></li>
+<li><xref href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token" scope="external">Creating a personal access token on GitHub</xref></li>
+<li><xref href="https://github.com/settings/tokens/new?description=pipelines-as-code-token&amp;scopes=repo" scope="external">Classic tokens with pre-filled permissions</xref></li>
+</ul>
+</div>
+</body>
+</topic>
